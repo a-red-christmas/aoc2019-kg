@@ -4,6 +4,8 @@
 # move the paddle for the next round
 
 import time
+import pathlib
+import pickle
 import sys
 from collections import deque
 from intcode import IntCodeComputer, ProgramState
@@ -17,6 +19,7 @@ class Game:
         # Internal state needed for learning
         self._baseline = 21
 
+        self._ball_pos = 0
         self._ball_pos_at_miss = 0
         self._paddle_pos = 0
         self._paddle_pos_at_miss = 0
@@ -27,13 +30,18 @@ class Game:
         else:
             if t == 3:
                 self._paddle_pos = x
-            if t == 4 and y == self._baseline:
-                self._ball_pos_at_miss = x
-                self._paddle_pos_at_miss = self._paddle_pos
+            if t == 4:
+                self._ball_pos = x
+                if y == self._baseline:
+                    self._ball_pos_at_miss = x
+                    self._paddle_pos_at_miss = self._paddle_pos
 
             self.screen[(x, y)] = t
 
-    def paddle_gap(self):
+    def current_paddle_gap(self):
+        return self._ball_pos - self._paddle_pos
+
+    def paddle_gap_at_miss(self):
         return self._ball_pos_at_miss - self._paddle_pos_at_miss
 
     def balls_left(self):
@@ -93,23 +101,55 @@ def printable_moves(moves):
 
 
 class RobotPlayer:
-    def __init__(self, game_core):
+
+    cache_file = pathlib.Path("013.2.cache.pkl")
+
+    def __init__(self, game_core, use_core_cache=False):
         self.joystick = []
         self.game_core = game_core
-        self.current_box = None
+        self.use_core_cache = use_core_cache
 
-    def play_round(self, full_display=False):
-        box = ArcadeBox(self.game_core)
-        moves_played = []
-        proposed_moves = deque(self.joystick)
+    def load_from_cache(self):
+        if self.cache_file.exists():
+            cache = pickle.load(self.cache_file.open("rb"))
+        else:
+            return None
+
+        if cache.get("original_core") == self.game_core:
+            mp = cache.get("moves_played")
+            if mp == self.joystick[:len(mp)]:
+                return cache
+
+    def save_core_cache(self, box, moves_played):
+        cache = {
+            "original_core": self.game_core,
+            "arcadebox": box,
+            "moves_played": moves_played
+        }
+        pickle.dump(cache, self.cache_file.open("wb"))
+
+    def play_round(self, display_last=0):
+        cache = self.load_from_cache()
+        if cache is not None and self.use_core_cache:
+            box = cache.get("arcadebox")
+            moves_played = cache.get("moves_played")
+            proposed_moves = deque(self.joystick[len(moves_played):])
+        else:
+            box = ArcadeBox(self.game_core)
+            moves_played = []
+            proposed_moves = deque(self.joystick)
 
         while box.computer.state == ProgramState.running:
+            if len(proposed_moves) == 10:  # Don't make this too small ...
+                self.save_core_cache(box, moves_played)
+
             joy = proposed_moves.popleft() if proposed_moves else 0
+
             moves_played += [joy]
             box.play_step(joy)
-            if full_display:
+            if display_last > len(proposed_moves):
                 print(printable_moves(moves_played)[-80:])
-                print(box.game.paddle_gap())
+                print(box.game.paddle_gap_at_miss())
                 box.display()
                 time.sleep(.2)
 
@@ -117,10 +157,11 @@ class RobotPlayer:
         moves_played = moves_played[:-1]
         self.joystick = predicted_moves(box, moves_played)
 
-        self.current_box = box
+        print(f"s={box.game.score} b={box.game.balls_left()}")
+
         return box.game.balls_left()
 
-    def play_to_win(self, initial_moves=None, full_display=False):
+    def play_to_win(self, initial_moves=None, display_last=0):
         if initial_moves is not None:
             _m = {
                 "-": 0,
@@ -129,31 +170,24 @@ class RobotPlayer:
             }
             self.joystick = [_m[m] for m in initial_moves]
 
-        while self.play_round(full_display):
+        while self.play_round(display_last):
             with open("013.2.moves.txt", "w") as f:
                 f.write(printable_moves(self.joystick))
-
-            if full_display:
-                time.sleep(1)
-            else:
-                print(f"s={self.current_box.game.score} b={self.current_box.game.balls_left()}")
 
 
 def predicted_moves(box, moves_played):
     if box.game.balls_left() == 0:
         return moves_played
 
-    paddle_gap_at_end = box.game.paddle_gap()
+    paddle_gap_at_end = box.game.paddle_gap_at_miss()
 
     if moves_played[-1] != 0:
         raise RuntimeError("Un-winnable game!")
 
     if paddle_gap_at_end > 0:
-        #paddle_gap_at_end += 1
         moves_played[-abs(paddle_gap_at_end):] = [1] * paddle_gap_at_end
 
     if paddle_gap_at_end < 0:
-        #paddle_gap_at_end -= 1
         moves_played[-abs(paddle_gap_at_end):] = [-1] * -paddle_gap_at_end
 
     return moves_played
@@ -165,9 +199,11 @@ def main():
 
     core[0] = 2  # Set mode to play for free
     initial_moves = open("013.2.moves.txt", "r").readline().strip()
-    player = RobotPlayer(core)
-    #player.play_round()
-    player.play_to_win(initial_moves)
+    # initial_moves = open("013.2.moves-checkpoint1.txt", "r").readline().strip()
+    # initial_moves = None
+    player = RobotPlayer(core, use_core_cache=True)
+    # player.play_round()
+    player.play_to_win(initial_moves, display_last=50)
 
 
 main()
