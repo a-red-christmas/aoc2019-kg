@@ -33,3 +33,21 @@ initial abstractions are more costly.
 
 In the end, after the contest is done, I will write the final version of
 the intcode computer in C++ as an exercise.
+
+## Day 13
+This was a lot of fun. I used a very simple "learning" algorithm to have
+a robot player repeatedly play the game until it won. This, however,
+needs manual intervention
+
+1. There was some glitch, I think in the "game" itself, where sometimes
+   the ball would slip by the paddle. For this, manual intervention was
+   needed.
+2. Towards the end it is quite easy for the system to fall into an
+   infinite loop, with the paddle bouncing the ball back and forth in a
+   cycle without encountering any bricks. Manual intervention is needed
+
+A smarter algorithm could be developed that jiggled the computed
+solution randomly until further bricks are hit by a move. I did not have
+time to code up this solution. Perhaps later...
+   
+I did implement a caching system ...
