@@ -34,6 +34,20 @@ initial abstractions are more costly.
 In the end, after the contest is done, I will write the final version of
 the intcode computer in C++ as an exercise.
 
+## Day 12
+
+I could not figure out a solution to Part 2. I'm not sure if some deep
+math is needed, or just logic. The solution I came up with a tortoise
+and hare type algorithm where we run two simulations in parallel with
+one running 2x the other and check to see whenthe 2x simulation jumps
+over, or lands on the 1x simulation, but this is too slow - I let it run
+overnight and it did not finish. I suspect there is a structure to the
+problem that can be exploited. I do note that the axes are independent
+of each other, so that is one simplification, but other than that,
+without iteratively doing each step, I can not think of a way to
+simplify the simulation.
+
+
 ## Day 13
 This was a lot of fun. I used a very simple "learning" algorithm to have
 a robot player repeatedly play the game until it won. This, however,
