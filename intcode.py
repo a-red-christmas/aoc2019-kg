@@ -21,15 +21,23 @@ class Param:
         self.data = data
         self.mode = mode
 
+    def print(self, val):
+        if self.mode == ParamMode.reference:
+            return f"([{self.data}] -> {val})"
+        else:
+            return f"{self.data}"
+
 
 class IntCodeComputer:
-    def __init__(self):
+    def __init__(self, debug=False):
         self._core = []
         self.program_counter: int = 0
         self.relative_base: int = 0
         self.state = ProgramState.waiting
         self.input_buffer: List[int] = []
         self.output_buffer: List[int] = []
+        self._debug = debug
+        self._log = []
 
         self.opcodes = {
             1: self._add,
@@ -85,6 +93,9 @@ class IntCodeComputer:
     def peek(self, i):
         return self.read_value(i)
 
+    def get_log(self):
+        return self._log
+
     def __str__(self):
         return str(f"[pc={self.program_counter}, st={self.state}] {self._core}")
 
@@ -132,54 +143,93 @@ class IntCodeComputer:
         i, j, k = self._extract_params(3, mode)
         a, b = self.read_value(i), self.read_value(j)
         self.write_value(k, a + b)
+        if self._debug:
+            self._log += [f"[{self.program_counter:#4}] ADD {i.print(a)}, {j.print(b)} = {a + b} => [{k.data}]"]
         self.program_counter += 4
 
     def _mul(self, mode):
         i, j, k = self._extract_params(3, mode)
         a, b = self.read_value(i), self.read_value(j)
         self.write_value(k, a * b)
+        if self._debug:
+            self._log += [f"[{self.program_counter:#4}] MUL {i.print(a)}, {j.print(b)} = {a * b} => [{k.data}]"]
         self.program_counter += 4
 
     def _save_input(self, mode):
         k, = self._extract_params(1, mode)
-        self.write_value(k, self.input_buffer.pop())
+        val = self.input_buffer.pop()
+        self.write_value(k, val)
+        if self._debug:
+            self._log += [f"[{self.program_counter:#4}] INP {val} -> [{k.data}]"]
         self.program_counter += 2
 
     def _output(self, mode):
         k, = self._extract_params(1, mode)
-        self.output_buffer += [self.read_value(k)]
+        val = self.read_value(k)
+        self.output_buffer += [val]
+        if self._debug:
+            self._log += [f"[{self.program_counter:#4}] OUT {k.print(val)}"]
         self.program_counter += 2
 
     def _jump_if_true(self, mode):
         a, b = self._extract_params(2, mode)
-        if self.read_value(a):
-            self.program_counter = self.read_value(b)
+        val_a = self.read_value(a)
+        if self._debug:
+            self._log += [f"[{self.program_counter:#4}] JMP TRUE {a.print(val_a)}"]
+
+        if val_a:
+            val_b = self.read_value(b)
+            self.program_counter = val_b
+            if self._debug:
+                self._log[-1] += f" -> {b.print(val_b)}"
         else:
             self.program_counter += 3
+            if self._debug:
+                self._log[-1] += f" -> NOJMP"
 
     def _jump_if_false(self, mode):
         a, b = self._extract_params(2, mode)
-        if not self.read_value(a):
-            self.program_counter = self.read_value(b)
+        val_a = self.read_value(a)
+        if self._debug:
+            self._log += [f"[{self.program_counter:#4}] JMP FALSE {a.print(val_a)}"]
+
+        if not val_a:
+            val_b = self.read_value(b)
+            self.program_counter = val_b
+            if self._debug:
+                self._log[-1] += f" -> {b.print(val_b)}"
         else:
             self.program_counter += 3
+            if self._debug:
+                self._log[-1] += f" -> NOJMP"
 
     def _less_than(self, mode):
         i, j, k = self._extract_params(3, mode)
         a, b = self.read_value(i), self.read_value(j)
-        self.write_value(k, 1 if a < b else 0)
+        val = 1 if a < b else 0
+        self.write_value(k, val)
+        if self._debug:
+            self._log += [f"[{self.program_counter:#4}] LT {i.print(a)}, {j.print(b)} : {val} => [{k.data}]"]
         self.program_counter += 4
 
     def _equals(self, mode):
         i, j, k = self._extract_params(3, mode)
         a, b = self.read_value(i), self.read_value(j)
-        self.write_value(k, 1 if a == b else 0)
+        val = 1 if a == b else 0
+        self.write_value(k, val)
+        if self._debug:
+            self._log += [f"[{self.program_counter:#4}] EQ {i.print(a)}, {j.print(b)} : {val} => [{k.data}]"]
         self.program_counter += 4
 
     def _adjust_relative_base(self, mode):
         k, = self._extract_params(1, mode)
-        self.relative_base += self.read_value(k)
+        val = self.read_value(k)
+        self.relative_base += val
+        if self._debug:
+            self._log += [f"[{self.program_counter:#4}] RELBASE {k.print(val)} -> {self.relative_base}"]
         self.program_counter += 2
 
     def _halt(self, mode):
         self.state = ProgramState.halt
+        if self._debug:
+            self._log += [f"[{self.program_counter:#4}] HLT"]
