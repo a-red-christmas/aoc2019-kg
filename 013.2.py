@@ -100,12 +100,43 @@ def printable_moves(moves):
     return "".join(_m[m] for m in moves)
 
 
+class Learner:
+    def __init__(self):
+        self.paddle_gap_at_end = 0
+        self.moves_played = []
+
+    def learn(self, box, moves_played):
+        if box.game.balls_left() == 0:
+            return moves_played
+
+        paddle_gap_at_end = box.game.paddle_gap_at_miss()
+
+        if moves_played[-1] != 0:
+            # Our mysterious off by one error
+            sign = 1 if self.paddle_gap_at_end >= 0 else -1
+            streak = sign * (abs(self.paddle_gap_at_end) + 1)
+        else:
+            streak = paddle_gap_at_end
+
+        if paddle_gap_at_end > 0:
+            moves_played[-abs(streak):] = [1] * streak
+
+        if paddle_gap_at_end < 0:
+            moves_played[-abs(streak):] = [-1] * -streak
+
+        self.moves_played = moves_played
+        self.paddle_gap_at_end = streak
+
+        return moves_played
+
+
 class RobotPlayer:
 
     cache_file = pathlib.Path("013.2.cache.pkl")
 
     def __init__(self, game_core, use_core_cache=False):
         self.joystick = []
+        self.learner = Learner()
         self.game_core = game_core
         self.use_core_cache = use_core_cache
 
@@ -140,24 +171,28 @@ class RobotPlayer:
             proposed_moves = deque(self.joystick)
 
         while box.computer.state == ProgramState.running:
-            if len(proposed_moves) == 10:  # Don't make this too small ...
+            if len(proposed_moves) == 50:  # Don't make this too small ...
                 self.save_core_cache(box, moves_played)
 
             joy = proposed_moves.popleft() if proposed_moves else 0
 
             moves_played += [joy]
             box.play_step(joy)
-            if display_last > len(proposed_moves):
-                print(printable_moves(moves_played)[-80:])
-                print(box.game.paddle_gap_at_miss())
-                box.display()
-                time.sleep(.2)
+            print(chr(27) + "[2J")
+            print(printable_moves(moves_played)[-44:])
+            print(f"balls={box.game.balls_left()} score={box.game.score}")
+            box.display()
+            time.sleep(.05)
 
         # Discard last move
         moves_played = moves_played[:-1]
-        self.joystick = predicted_moves(box, moves_played)
+        self.joystick = self.learner.learn(box, moves_played)
 
-        print(f"s={box.game.score} b={box.game.balls_left()}")
+        print(chr(27) + "[2J")
+        print(f"miss={box.game.paddle_gap_at_miss()}")
+        print(f"balls={box.game.balls_left()} score={box.game.score}")
+        box.display()
+        time.sleep(1)
 
         return box.game.balls_left()
 
@@ -175,26 +210,8 @@ class RobotPlayer:
                 f.write(printable_moves(self.joystick))
 
 
-def predicted_moves(box, moves_played):
-    if box.game.balls_left() == 0:
-        return moves_played
-
-    paddle_gap_at_end = box.game.paddle_gap_at_miss()
-
-    if moves_played[-1] != 0:
-        raise RuntimeError("Un-winnable game!")
-
-    if paddle_gap_at_end > 0:
-        moves_played[-abs(paddle_gap_at_end):] = [1] * paddle_gap_at_end
-
-    if paddle_gap_at_end < 0:
-        moves_played[-abs(paddle_gap_at_end):] = [-1] * -paddle_gap_at_end
-
-    return moves_played
-
-
 def main():
-    with open(sys.argv[1], "r") as f:
+    with open("013.1.input.txt", "r") as f:
         core = [int(c) for c in f.readline().strip().split(",")]
 
     core[0] = 2  # Set mode to play for free
@@ -202,8 +219,7 @@ def main():
     # initial_moves = open("013.2.moves-checkpoint1.txt", "r").readline().strip()
     # initial_moves = None
     player = RobotPlayer(core, use_core_cache=True)
-    # player.play_round()
-    player.play_to_win(initial_moves, display_last=50)
+    player.play_to_win(initial_moves, display_last=5)
 
 
 main()
