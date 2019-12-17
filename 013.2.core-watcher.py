@@ -142,15 +142,33 @@ def main():
 
     last_score = 0
 
+    score_locs = []
+
     while box.computer.state == ProgramState.running and mv_no < len(initial_moves):
         joy = initial_moves[mv_no]
         box.play_step(joy)
         if box.game.score > last_score:
-            print(f"balls={box.game.balls_left()} score={box.game.score}")
+            # print(f"balls={box.game.balls_left()} score={box.game.score}")
+            # print(f"{box.computer._core[435]}, {box.game.score}")
+            sl = box.computer._core[435]
+            score_locs += [(sl, box.computer._core[sl], box.game.score - last_score)]
+            # print(score_locs[-1])
+
             last_score = box.game.score
         mv_no += 1
 
-    print("\n".join(box.computer.get_log()))
+    # print("\n".join(box.computer.get_log()))
+
+    screen = {}
+    for l in score_locs:
+        _n = l[0] - 1651
+        # l = row * 44 + col
+        col = _n % 44
+        row = _n // 44
+        screen[(row, col)] = 1
+
+    for row in range(23):
+        print("".join("X" if screen.get((row, col)) else " " for col in range(44)))
 
 
 main()
