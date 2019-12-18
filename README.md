@@ -66,6 +66,16 @@ time to code up this solution. Perhaps later...
    
 I did implement a caching system ...
 
+On day 17 I did debug the learning algorithm and does quite well, except
+that it eventually gets stuck in a cycle ...
+
+[![Learning 1](http://img.youtube.com/vi/UmLI9LqPXW4/0.jpg)](http://www.youtube.com/watch?v=UmLI9LqPXW4)
+
+[![Learning 2](http://img.youtube.com/vi/vHOktbNpcfk/0.jpg)](http://www.youtube.com/watch?v=vHOktbNpcfk)
+
+[![Learning cycle](http://img.youtube.com/vi/Y1k-22AV-_8/0.jpg)](http://www.youtube.com/watch?v=Y1k-22AV-_8)
+
+
 ## Day 16 (Solving Day 14)
 
 I was surprised by how easy these problems were after battling with
@@ -298,6 +308,8 @@ properly. The code would add up the wrong scores and so on.
 Finally, I tried forcing all the 22nd row positions to masquarade as
 paddles i.e I created a giant paddle that spans the width of the board
 and this did the trick.
+
+[![Complete cheat](http://img.youtube.com/vi/PdavBT6R6Ak/0.jpg)](http://www.youtube.com/watch?v=PdavBT6R6Ak)
 
 
 ## Day 17 (solving Day 15)
