@@ -298,3 +298,14 @@ properly. The code would add up the wrong scores and so on.
 Finally, I tried forcing all the 22nd row positions to masquarade as
 paddles i.e I created a giant paddle that spans the width of the board
 and this did the trick.
+
+
+## Day 17 (solving Day 15)
+
+These were FUN! The first part was challenging because of the robot and
+in the end I ended up creating clones of the robots (cloning their
+brains - had to be careful, the IntCode computer has a bunch of state).
+I worried that I would consume to much memory, depending on what the map
+looked like - for example if it was a wide open field, I'd end up with a
+lot of clones, of the order of the depth. It turns out it's a maze like
+map and I think I had at most 5 clones at a time.
