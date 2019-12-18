@@ -67,7 +67,7 @@ def main():
     with open("015.1.input.txt", "r") as f:
         core = [int(c) for c in f.readline().strip().split(",")]
 
-    visited = {(0, 0)}
+    visited = {(0, 0): 3}
     computer = IntCodeComputer()
     computer.load_core(core)
     computer.state = ProgramState.running
@@ -78,27 +78,30 @@ def main():
         for move in all_moves:
             res, new_droid = droid.clone_and_move(move)
             if res == 0:
-                visited.add(new_droid.loc)
+                visited[new_droid.loc] = 1
                 continue
             elif res == 1:
                 if new_droid.loc in visited:
                     continue
                 else:
                     search_q.append(new_droid)
-                    visited.add(new_droid.loc)
+                    visited[new_droid.loc] = 2
             elif res == 2:
+                visited[new_droid.loc] = 4
                 print(new_droid.depth)
                 return 0
 
         display_visited(visited)
+        print(droid.depth)
         time.sleep(.1)
 
 
 def display_visited(visited):
+    legend = [" ", "#", ".", "X", "$"]
     extent = [-20, -30, 30, 30]
     print(chr(27) + "[2J")
     for col in range(extent[0], extent[2]):
-        print("".join("*" if (row, col) in visited else " " for row in range(extent[1], extent[3])))
+        print("".join(legend[visited.get((row, col), 0)] for row in range(extent[1], extent[3])))
 
 
 main()
