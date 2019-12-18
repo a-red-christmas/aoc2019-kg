@@ -53,8 +53,16 @@ class IntCodeComputer:
         }
 
     def load_core(self, core):
-        self._core = list(core)
+        self._core = core.copy()
         self._reset()
+
+    def clone(self):
+        new_computer = IntCodeComputer()
+        new_computer.load_core(self._core)
+        new_computer.program_counter = self.program_counter
+        new_computer.relative_base = self.relative_base
+        new_computer.state = self.state
+        return new_computer
 
     def _reset(self):
         self.program_counter = 0
