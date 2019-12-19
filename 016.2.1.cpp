@@ -36,8 +36,11 @@ The next is a cluster of 1 that starts in multiples of 5 and grows by 1
 
 Cluster of -1, starts in multiples of 7, grows by 1
 
-The computation of each cluster can be made less expensive by observing that,
-eventually, large parts of the cluster overlap. 
+The computation of each cluster can be made constant time by computing the
+cumulative sum and using that.
+
+**Another interesting observation is that the nth digit only depends on the the
+values of the nth digit onwards.**
 
 */
 
@@ -59,18 +62,26 @@ int array_sum(const std::vector<u_char> &number, size_t i, size_t j)
   return sum;
 }
 
-std::vector<u_char> str_to_number(const std::string &_number)
+std::vector<u_char> str_to_number(const std::string &_number, size_t repeats = 1)
 {
   std::vector<u_char> number;
-  number.resize(_number.size());
+  number.resize(_number.size() * repeats);
   for (size_t i = 0; i < _number.size(); i++)
   {
-    number[i] = _number[i] - '0';
+    number[i] = _number[i % _number.size()] - '0';
   }
   return number;
 }
 
-void print_number(std::vector<u_char> &number, size_t offset, size_t size)
+std::string load_number_from_file(const std::string fname)
+{
+  std::ifstream t(fname);
+  std::stringstream buffer;
+  buffer << t.rdbuf();
+  return buffer.str();
+}
+
+void print_number(const std::vector<u_char> &number, size_t offset, size_t size)
 {
   for (size_t i = offset; i < offset + size; i++)
   {
@@ -108,35 +119,20 @@ struct Glider
     return add ? sum : -sum;
   }
 
-  bool done(const std::vector<u_char> &number)
+  bool done(const std::vector<size_t> &number)
   {
     return range.start >= number.size();
   }
 
-  int next(const std::vector<u_char> &number)
+  int next(const std::vector<size_t> &cum_sum)
   {
-    if (done(number))
+    size++;
+    range = {range.start + slope, range.start + slope + size};
+    if (done(cum_sum))
       return 0;
 
-    size++;
-    Range new_range = {range.start + slope, range.start + slope + size};
-    // When recomputing the sum, we want to
-    // 1. Remove the tail (part we left behind)
-    // 2. Conserve the body (the common part)
-    // 3. Add the head (the new bit we have)
-
-    if (range.end <= new_range.start)
-    {
-      sum = 0; // non-overlapping
-    }
-    else
-    {
-      sum -= array_sum(number, range.start, new_range.start);
-    }
-    sum += array_sum(number, std::max(range.end, new_range.start), new_range.end);
-
-    range = new_range;
-    return !done(number) ? get_sum() : 0;
+    sum = cum_sum[std::min(range.end - 1, cum_sum.size() - 1)] - cum_sum[range.start - 1];
+    return get_sum();
   }
 };
 
@@ -158,131 +154,129 @@ void print_gliders(std::vector<Glider> &gliders, size_t len)
   print_number(coeffs, 0, len);
 }
 
-void compute_fft(const std::vector<u_char> &in, std::vector<u_char> &out,
-                 bool diagnostic = false)
+struct FFT
 {
-  // Setup gliders
-  size_t glider_count = 0;
-  bool add = true;
-  size_t slope = 1;
-  std::vector<Glider> gliders;
-  int sum = 0;
-  for (size_t d = 0; d < in.size(); d += 2)
-  {
-    gliders.push_back(Glider(d, in[d], d + 1, add));
-    sum += gliders[glider_count].get_sum();
-    add = !add;
-    glider_count += 1;
-  }
-  out[0] = std::abs(sum) % 10;
+  std::vector<u_char> buf[2];
+  std::vector<size_t> cum_sum;
+  size_t buf_no;
 
-  for (size_t d = 1; d < in.size(); d++)
+  FFT(const std::string &_number, size_t repeats = 1)
   {
+    buf[0] = str_to_number(_number, repeats);
+    buf[1].resize(buf[0].size());
+    cum_sum.resize(buf[0].size());
+    buf_no = 0;
+  }
+
+  const std::vector<u_char> &get_number()
+  {
+    return buf[buf_no];
+  }
+
+  const std::vector<u_char> &compute(bool diagnostic = false)
+  {
+    const auto &in = buf[buf_no];
+    auto &out = buf[1 - buf_no];
+
+    cum_sum[0] = in[0];
+    for (size_t i = 1; i < in.size(); i++)
+    {
+      cum_sum[i] = in[i] + cum_sum[i - 1];
+    }
+
+    size_t glider_count = 0;
+    bool add = true;
+    size_t slope = 1;
+    std::vector<Glider> gliders;
+    int sum = 0;
+    for (size_t d = 0; d < in.size(); d += 2)
+    {
+      gliders.push_back(Glider(d, in[d], d + 1, add));
+      sum += gliders[glider_count].get_sum();
+      add = !add;
+      glider_count += 1;
+    }
+    out[0] = std::abs(sum) % 10;
+
+    for (size_t d = 1; d < in.size(); d++)
+    {
+      if (diagnostic)
+        print_gliders(gliders, in.size());
+      sum = 0;
+      for (size_t i = 0; i < glider_count; i++)
+      {
+        sum += gliders[i].next(cum_sum);
+        // std::cout << gliders[i].get_sum() << ", ";
+      }
+      // std::cout << std::endl;
+      out[d] = std::abs(sum) % 10;
+      // This is the magic that makes things NlogN : remove unused gliders
+      if (gliders[glider_count - 1].done(cum_sum))
+        glider_count--;
+    }
+
     if (diagnostic)
       print_gliders(gliders, in.size());
-    sum = 0;
-    for (size_t i = 0; i < glider_count; i++)
-    {
-      sum += gliders[i].next(in);
-      // std::cout << gliders[i].get_sum() << ", ";
-    }
-    // std::cout << std::endl;
-    out[d] = std::abs(sum) % 10;
-    // This is the magic that makes things NlogN : remove unused gliders
-    if (gliders[glider_count - 1].done(in))
-      glider_count--;
-  }
 
-  if (diagnostic)
-    print_gliders(gliders, in.size());
-}
+    buf_no = 1 - buf_no;
+    return out;
+  }
+};
 
 void multiplicand_diagnostic()
 {
-  //auto n0 =
-  //str_to_number("12345678901234567890123456789012345678901234567890");
-  auto n0 = str_to_number("1234567890123456789012345678901234567890");
-  decltype(n0) n1;
-  n1.resize(n0.size());
-  compute_fft(n0, n1, true);
+  FFT fft("1234567890123456789012345678901234567890");
+  fft.compute(true);
 }
 
 void test0()
 {
-  auto n0 = str_to_number("12345678");
-  decltype(n0) n1;
-  n1.resize(n0.size());
-
-  print_number(n0, 0, 8);
-  compute_fft(n0, n1);
-  print_number(n1, 0, 8);
-  compute_fft(n1, n0);
-  print_number(n0, 0, 8);
-  compute_fft(n0, n1);
-  print_number(n1, 0, 8);
+  FFT fft("12345678");
+  print_number(fft.get_number(), 0, 8);
+  print_number(fft.compute(), 0, 8);
+  print_number(fft.compute(), 0, 8);
+  print_number(fft.compute(), 0, 8);
 }
 
 void test1()
 {
-  auto n0 = str_to_number("69317163492948606335995924319873");
-  decltype(n0) n1;
-  n1.resize(n0.size());
+  FFT fft("69317163492948606335995924319873");
 
-  print_number(n0, 0, 8);
-  for (size_t i = 0; i < 50; i++)
+  print_number(fft.get_number(), 0, 8);
+  for (size_t i = 0; i < 100; i++)
   {
-    compute_fft(n0, n1);
-    compute_fft(n1, n0);
+    print_number(fft.compute(), 0, 8);
   }
-  print_number(n0, 0, 8);
 }
 
 void test2()
 {
-  std::ifstream t("016.1.input.txt");
-  std::stringstream buffer;
-  buffer << t.rdbuf();
-
-  auto number = str_to_number(buffer.str());
+  std::string number_str = "03081770884921959731165446850517";
+  FFT fft(number_str, 10000);
+  size_t offset = std::stoi(number_str.substr(0, 7));
+  print_number(fft.get_number(), 0, 8);
   for (size_t i = 0; i < 100; i++)
   {
-    //number = compute_fft(number);
+    std::cout << "." << std::flush;
+    fft.compute();
   }
-  print_number(number, 0, 8);
-}
-
-std::string load_repeated_number(const std::string fname)
-{
-  std::ifstream t(fname);
-  std::stringstream buffer;
-  buffer << t.rdbuf();
-  const std::string number_templ = buffer.str();
-  std::string number;
-  for (size_t i = 0; i < 10000; i++)
-  {
-    number.append(number_templ);
-  }
-  return number;
+  print_number(fft.get_number(), offset, 8);
 }
 
 void main_problem()
 {
-  std::string number_str = load_repeated_number("016.2.test2.txt");
-  auto n0 = str_to_number(number_str);
+  std::string number_str = load_number_from_file("016.1.input.txt");
   size_t offset = std::stoi(number_str.substr(0, 7));
 
-  decltype(n0) n1;
-  n1.resize(n0.size());
-
-  print_number(n0, 0, 8);
-  for (size_t i = 0; i < 50; i++)
+  FFT fft(number_str, 10000);
+  print_number(fft.get_number(), offset, 8);
+  for (size_t i = 0; i < 100; i++)
   {
-    std::cout << ".";
-    compute_fft(n0, n1);
-    compute_fft(n1, n0);
+    std::cout << "." << std::flush;
+    fft.compute();
   }
   std::cout << std::endl;
-  print_number(n0, 0, 8);
+  print_number(fft.get_number(), offset, 8);
 }
 
 int main(int argc, char *argv[])
@@ -290,6 +284,7 @@ int main(int argc, char *argv[])
   // multiplicand_diagnostic();
   // test0();
   // test1();
-  main_problem();
+  test2();
+  // main_problem();
   return 0;
 }
