@@ -52,23 +52,14 @@ values of the nth digit onwards.**
 #include <algorithm>
 #include <string>
 
-int array_sum(const std::vector<u_char> &number, size_t i, size_t j)
-{
-  int sum = 0;
-  for (size_t k = i; k < j and k < number.size(); k++)
-  {
-    sum += number[k];
-  }
-  return sum;
-}
-
-std::vector<u_char> str_to_number(const std::string &_number, size_t repeats = 1)
+std::vector<u_char> str_to_number(
+    const std::string &_number, size_t offset = 0, size_t repeats = 1)
 {
   std::vector<u_char> number;
-  number.resize(_number.size() * repeats);
-  for (size_t i = 0; i < _number.size(); i++)
+  number.resize(_number.size() * repeats - offset);
+  for (size_t i = offset; i < _number.size() * repeats; i++)
   {
-    number[i] = _number[i % _number.size()] - '0';
+    number[i - offset] = _number[i % _number.size()] - '0';
   }
   return number;
 }
@@ -81,77 +72,13 @@ std::string load_number_from_file(const std::string fname)
   return buffer.str();
 }
 
-void print_number(const std::vector<u_char> &number, size_t offset, size_t size)
+void print_number(const std::vector<u_char> &number, size_t size)
 {
-  for (size_t i = offset; i < offset + size; i++)
+  for (size_t i = 0; i < size; i++)
   {
     std::cout << std::to_string(number[i]);
   }
   std::cout << std::endl;
-}
-
-struct Range
-{
-  size_t start;
-  size_t end;
-};
-
-struct Glider
-{
-  size_t slope;
-  size_t size;
-  Range range;
-  bool add;
-  int sum;
-
-  Glider(size_t _start, int _sum, size_t _slope, bool _add)
-  {
-    slope = _slope;
-    add = _add;
-    size = 1;
-    range.start = _start;
-    range.end = _start + 1;
-    sum = _sum;
-  }
-
-  int get_sum()
-  {
-    return add ? sum : -sum;
-  }
-
-  bool done(const std::vector<size_t> &number)
-  {
-    return range.start >= number.size();
-  }
-
-  int next(const std::vector<size_t> &cum_sum)
-  {
-    size++;
-    range = {range.start + slope, range.start + slope + size};
-    if (done(cum_sum))
-      return 0;
-
-    sum = cum_sum[std::min(range.end - 1, cum_sum.size() - 1)] - cum_sum[range.start - 1];
-    return get_sum();
-  }
-};
-
-void print_gliders(std::vector<Glider> &gliders, size_t len)
-{
-  std::vector<u_char> coeffs;
-  coeffs.resize(len, 0);
-
-  for (size_t d = 0; d < len; d++)
-  {
-    for (size_t i = 0; i < gliders.size(); i++)
-    {
-      for (size_t k = gliders[i].range.start; k < gliders[i].range.end && k < len; k++)
-      {
-        coeffs[k] = gliders[i].add ? 1 : 3;
-      }
-    }
-  }
-  print_number(coeffs, 0, len);
 }
 
 struct FFT
@@ -159,13 +86,15 @@ struct FFT
   std::vector<u_char> buf[2];
   std::vector<size_t> cum_sum;
   size_t buf_no;
+  size_t offset;
 
-  FFT(const std::string &_number, size_t repeats = 1)
+  FFT(const std::string &_number, size_t _offset = 0, size_t repeats = 1)
   {
-    buf[0] = str_to_number(_number, repeats);
+    buf[0] = str_to_number(_number, _offset, repeats);
     buf[1].resize(buf[0].size());
-    cum_sum.resize(buf[0].size());
+    cum_sum.resize(buf[0].size() + 1);
     buf_no = 0;
+    offset = _offset;
   }
 
   const std::vector<u_char> &get_number()
@@ -178,46 +107,34 @@ struct FFT
     const auto &in = buf[buf_no];
     auto &out = buf[1 - buf_no];
 
-    cum_sum[0] = in[0];
-    for (size_t i = 1; i < in.size(); i++)
+    cum_sum[0] = 0;
+    for (size_t i = 0; i < in.size(); i++)
     {
-      cum_sum[i] = in[i] + cum_sum[i - 1];
+      cum_sum[i + 1] = in[i] + cum_sum[i];
     }
 
-    size_t glider_count = 0;
-    bool add = true;
-    size_t slope = 1;
-    std::vector<Glider> gliders;
-    int sum = 0;
-    for (size_t d = 0; d < in.size(); d += 2)
+    for (size_t d = 0; d < in.size(); d++)
     {
-      gliders.push_back(Glider(d, in[d], d + 1, add));
-      sum += gliders[glider_count].get_sum();
-      add = !add;
-      glider_count += 1;
-    }
-    out[0] = std::abs(sum) % 10;
-
-    for (size_t d = 1; d < in.size(); d++)
-    {
-      if (diagnostic)
-        print_gliders(gliders, in.size());
-      sum = 0;
-      for (size_t i = 0; i < glider_count; i++)
+      int digit_sum = 0;
+      const size_t stride = offset + d + 1;
+      bool add = true;
+      for (size_t grp = 0;; grp += 2)
       {
-        sum += gliders[i].next(cum_sum);
-        // std::cout << gliders[i].get_sum() << ", ";
+        size_t start = grp * stride + d;
+        if (start >= in.size())
+          break;
+
+        int group_sum = cum_sum[std::min(start + stride, in.size())] - cum_sum[start];
+
+        // std::cout << (add ? " +" : " -") << group_sum << ", ";
+
+        digit_sum += add ? group_sum : -group_sum;
+        add = !add;
       }
+      out[d] = std::abs(digit_sum) % 10;
+
       // std::cout << std::endl;
-      out[d] = std::abs(sum) % 10;
-      // This is the magic that makes things NlogN : remove unused gliders
-      if (gliders[glider_count - 1].done(cum_sum))
-        glider_count--;
     }
-
-    if (diagnostic)
-      print_gliders(gliders, in.size());
-
     buf_no = 1 - buf_no;
     return out;
   }
@@ -232,35 +149,40 @@ void multiplicand_diagnostic()
 void test0()
 {
   FFT fft("12345678");
-  print_number(fft.get_number(), 0, 8);
-  print_number(fft.compute(), 0, 8);
-  print_number(fft.compute(), 0, 8);
-  print_number(fft.compute(), 0, 8);
+  print_number(fft.get_number(), 8);
+  print_number(fft.compute(), 8);
+  print_number(fft.compute(), 8);
+  print_number(fft.compute(), 8);
 }
 
 void test1()
 {
-  FFT fft("69317163492948606335995924319873");
+  FFT fft("69317163492948606335995924319873", 0);
 
-  print_number(fft.get_number(), 0, 8);
+  print_number(fft.get_number(), 8);
   for (size_t i = 0; i < 100; i++)
   {
-    print_number(fft.compute(), 0, 8);
+    std::cout << ".";
+    fft.compute();
   }
+  std::cout << std::endl;
+  print_number(fft.get_number(), 8);
 }
 
 void test2()
 {
   std::string number_str = "03081770884921959731165446850517";
-  FFT fft(number_str, 10000);
   size_t offset = std::stoi(number_str.substr(0, 7));
-  print_number(fft.get_number(), 0, 8);
+
+  FFT fft(number_str, offset, 10000);
+  print_number(fft.get_number(), 8);
   for (size_t i = 0; i < 100; i++)
   {
     std::cout << "." << std::flush;
     fft.compute();
   }
-  print_number(fft.get_number(), offset, 8);
+  std::cout << std::endl;
+  print_number(fft.get_number(), 8);
 }
 
 void main_problem()
@@ -268,15 +190,15 @@ void main_problem()
   std::string number_str = load_number_from_file("016.1.input.txt");
   size_t offset = std::stoi(number_str.substr(0, 7));
 
-  FFT fft(number_str, 10000);
-  print_number(fft.get_number(), offset, 8);
+  FFT fft(number_str, offset, 10000);
+  print_number(fft.get_number(), 8);
   for (size_t i = 0; i < 100; i++)
   {
     std::cout << "." << std::flush;
     fft.compute();
   }
   std::cout << std::endl;
-  print_number(fft.get_number(), offset, 8);
+  print_number(fft.get_number(), 8);
 }
 
 int main(int argc, char *argv[])
@@ -284,7 +206,7 @@ int main(int argc, char *argv[])
   // multiplicand_diagnostic();
   // test0();
   // test1();
-  test2();
-  // main_problem();
+  // test2();
+  main_problem();
   return 0;
 }
